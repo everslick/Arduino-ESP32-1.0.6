@@ -16,6 +16,7 @@
 #if CONFIG_TINYUSB_VIDEO_ENABLED
 
 #include "esp32-hal-tinyusb.h"
+//#include "esp_camera.h"
 
 /* Time stamp base clock. It is a deprecated parameter. */
 #define UVC_CLOCK_FREQUENCY    27000000
@@ -28,7 +29,7 @@
     /* control */\
     + TUD_VIDEO_DESC_STD_VC_LEN\
     + (TUD_VIDEO_DESC_CS_VC_LEN + 1/*bInCollection*/)\
-    + TUD_VIDEO_DESC_INPUT_TERM_LEN\
+    + TUD_VIDEO_DESC_CAMERA_TERM_LEN\
     + TUD_VIDEO_DESC_OUTPUT_TERM_LEN\
     /* Interface 1, Alternate 0 */\
     + TUD_VIDEO_DESC_STD_VS_LEN\
@@ -54,14 +55,16 @@
   TUD_VIDEO_DESC_CS_VS_FMT_UNCOMPR(_fmtidx, _numfmtdesc, TUD_VIDEO_GUID_I420, 12, _frmidx, _asrx, _asry, _interlace, _cp)
 
 #define TUD_VIDEO_CAPTURE_DESCRIPTOR(_itf, _stridx, _epin, _width, _height, _fps, _epsize) \
-  TUD_VIDEO_DESC_IAD(_itf, (_itf+2), _stridx), \
+  TUD_VIDEO_DESC_IAD(_itf, 2, _stridx), \
   /* Video control 0 */ \
   TUD_VIDEO_DESC_STD_VC(_itf, 0, _stridx), \
     TUD_VIDEO_DESC_CS_VC( /* UVC 1.5*/ 0x0150, \
          /* wTotalLength - bLength */ \
-         TUD_VIDEO_DESC_INPUT_TERM_LEN + TUD_VIDEO_DESC_OUTPUT_TERM_LEN, \
+         TUD_VIDEO_DESC_CAMERA_TERM_LEN + TUD_VIDEO_DESC_OUTPUT_TERM_LEN, \
          UVC_CLOCK_FREQUENCY, 1), \
-      TUD_VIDEO_DESC_INPUT_TERM(UVC_ENTITY_CAP_INPUT_TERMINAL, VIDEO_ETT_COMPOSITE_CONNECTOR, 0, 0), \
+      TUD_VIDEO_DESC_CAMERA_TERM(UVC_ENTITY_CAP_INPUT_TERMINAL, 0, 0,\
+                                 /*wObjectiveFocalLengthMin*/0, /*wObjectiveFocalLengthMax*/0,\
+                                 /*wObjectiveFocalLength*/0, /*bmControls*/0), \
       TUD_VIDEO_DESC_OUTPUT_TERM(UVC_ENTITY_CAP_OUTPUT_TERMINAL, VIDEO_TT_STREAMING, 0, 1, 0), \
   /* Video stream alt. 0 */ \
   TUD_VIDEO_DESC_STD_VS( (_itf+1), 0, 0, 0), \
@@ -86,15 +89,15 @@
   /* VS alt 1 */\
   TUD_VIDEO_DESC_STD_VS((_itf+1), 1, 1, 0), \
     /* EP */ \
-    TUD_VIDEO_DESC_EP_ISO(_epin, _epsize, 1)
+    TUD_VIDEO_DESC_EP_BULK(_epin, _epsize, 1)
 
 
 ESP_EVENT_DEFINE_BASE(ARDUINO_USB_VIDEO_EVENTS);
 esp_err_t arduino_usb_event_post(esp_event_base_t event_base, int32_t event_id, void *event_data, size_t event_data_size, TickType_t ticks_to_wait);
 esp_err_t arduino_usb_event_handler_register_with(esp_event_base_t event_base, int32_t event_id, esp_event_handler_t event_handler, void *event_handler_arg);
 
-#define FRAME_WIDTH   80
-#define FRAME_HEIGHT  60
+#define FRAME_WIDTH   160
+#define FRAME_HEIGHT  120
 #define FRAME_RATE    10
 
 uint16_t tusb_video_load_descriptor(uint8_t * dst, uint8_t * itf)
@@ -103,15 +106,12 @@ uint16_t tusb_video_load_descriptor(uint8_t * dst, uint8_t * itf)
     uint8_t ep_num = tinyusb_get_free_in_endpoint();
     TU_VERIFY (ep_num != 0);
     uint8_t descriptor[TUD_VIDEO_CAPTURE_DESC_LEN] = {
-        // Interface number, string index, EP Out & IN address, EP size
+        // Interface number, string index, EP IN address, width, height, frame rate, EP size
         TUD_VIDEO_CAPTURE_DESCRIPTOR(*itf, str_index, (uint8_t)(0x80 | ep_num), FRAME_WIDTH, FRAME_HEIGHT, FRAME_RATE, 64)
     };
     *itf+=2;
     memcpy(dst, descriptor, TUD_VIDEO_CAPTURE_DESC_LEN);
     return TUD_VIDEO_CAPTURE_DESC_LEN;
-    // size_t desc_len = sizeof(UVCConfigurationDescriptor);
-    // memcpy(dst, UVCConfigurationDescriptor, desc_len);
-    // return desc_len;
 }
 
 static unsigned frame_num = 0;
@@ -171,16 +171,32 @@ void video_task(void)
   if (!already_sent) {
     already_sent = 1;
     start_ms = millis();
+
+    log_d("TX: %u", frame_num);
     fill_color_bar(frame_buffer, frame_num);
     tud_video_n_frame_xfer(0, 0, (void*)frame_buffer, FRAME_WIDTH * FRAME_HEIGHT * 16/8);
+    // camera_fb_t *fb = esp_camera_fb_get();
+    // if(fb){
+    //   log_d("TX: %u", fb->len);
+    //   tud_video_n_frame_xfer(0, 0, (void*)fb->buf, fb->len);
+    //   esp_camera_fb_return(fb);
+    // }
   }
 
   unsigned cur = millis();
   if (cur - start_ms < interval_ms) return; // not enough time
   if (tx_busy) return;
   start_ms += interval_ms;
+
+  log_d("TX: %u", frame_num);
   fill_color_bar(frame_buffer, frame_num);
   tud_video_n_frame_xfer(0, 0, (void*)frame_buffer, FRAME_WIDTH * FRAME_HEIGHT * 16/8);
+  // camera_fb_t *fb = esp_camera_fb_get();
+  // if(fb){
+  //   log_d("TX: %u", fb->len);
+  //   tud_video_n_frame_xfer(0, 0, (void*)fb->buf, fb->len);
+  //   esp_camera_fb_return(fb);
+  // }
 }
 
 
@@ -220,11 +236,61 @@ extern "C" int tud_video_power_mode_cb(uint_fast8_t ctl_idx, uint8_t power_mod){
 
 USBVideo::USBVideo(uint8_t ctl, uint8_t stm):_ctl(ctl), _stm(stm){
     tinyusb_enable_interface(USB_INTERFACE_VIDEO, TUD_VIDEO_CAPTURE_DESC_LEN, tusb_video_load_descriptor);
-    //tinyusb_enable_interface(USB_INTERFACE_VIDEO, sizeof(UVCConfigurationDescriptor), tusb_video_load_descriptor);
 }
 
 void USBVideo::begin(){
 
+// #define PWDN_GPIO_NUM     1
+// #define RESET_GPIO_NUM    2
+// #define XCLK_GPIO_NUM     42
+// #define SIOD_GPIO_NUM     41
+// #define SIOC_GPIO_NUM     18
+
+// #define Y9_GPIO_NUM       16
+// #define Y8_GPIO_NUM       39
+// #define Y7_GPIO_NUM       40
+// #define Y6_GPIO_NUM       15
+// #define Y5_GPIO_NUM       13
+// #define Y4_GPIO_NUM       5
+// #define Y3_GPIO_NUM       12
+// #define Y2_GPIO_NUM       14
+// #define VSYNC_GPIO_NUM    38
+// #define HREF_GPIO_NUM     4
+// #define PCLK_GPIO_NUM     3
+
+//   camera_config_t config;
+//   config.ledc_channel = LEDC_CHANNEL_0;
+//   config.ledc_timer = LEDC_TIMER_0;
+//   config.pin_d0 = Y2_GPIO_NUM;
+//   config.pin_d1 = Y3_GPIO_NUM;
+//   config.pin_d2 = Y4_GPIO_NUM;
+//   config.pin_d3 = Y5_GPIO_NUM;
+//   config.pin_d4 = Y6_GPIO_NUM;
+//   config.pin_d5 = Y7_GPIO_NUM;
+//   config.pin_d6 = Y8_GPIO_NUM;
+//   config.pin_d7 = Y9_GPIO_NUM;
+//   config.pin_xclk = XCLK_GPIO_NUM;
+//   config.pin_pclk = PCLK_GPIO_NUM;
+//   config.pin_vsync = VSYNC_GPIO_NUM;
+//   config.pin_href = HREF_GPIO_NUM;
+//   config.pin_sscb_sda = SIOD_GPIO_NUM;
+//   config.pin_sscb_scl = SIOC_GPIO_NUM;
+//   config.pin_pwdn = PWDN_GPIO_NUM;
+//   config.pin_reset = RESET_GPIO_NUM;
+//   config.xclk_freq_hz = 8000000;
+//   config.pixel_format = PIXFORMAT_YUV422;
+//   config.frame_size = FRAMESIZE_QQVGA;
+//   config.jpeg_quality = 12;
+//   config.fb_count = 2;
+//   config.fb_location = CAMERA_FB_IN_PSRAM;
+//   config.grab_mode = CAMERA_GRAB_LATEST;
+
+  // camera init
+  // esp_err_t err = esp_camera_init(&config);
+  // if (err != ESP_OK) {
+  //   log_e("Camera init failed with error 0x%x", err);
+  //   return;
+  // }
 }
 
 void USBVideo::end(){
