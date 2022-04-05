@@ -190,11 +190,39 @@ recipe.size.pattern="{compiler.path}{compiler.size.cmd}" -A "{build.path}/{build
 recipe.size.regex=^(?:\.iram0\.text|\.iram0\.vectors|\.dram0\.data|\.flash\.text|\.flash\.rodata|)\s+([0-9]+).*
 recipe.size.regex.data=^(?:\.dram0\.data|\.dram0\.bss|\.noinit)\s+([0-9]+).*
 
+## --------------------------------
+## Pluggable Discovery and Monitors
+## --------------------------------
+
 ## Required discoveries and monitors
 ## ---------------------------------
 pluggable_discovery.required.0=builtin:serial-discovery
 pluggable_discovery.required.1=builtin:mdns-discovery
 pluggable_monitor.required.serial=builtin:serial-monitor
+
+
+## release.json definition for custom discoveries and monitors
+## -----------------------------------------------------------
+##  "discoveryDependencies": [
+##    { "packager": "espressif", "name": "espnow-discovery" }
+##  ],
+##  "monitorDependencies": [
+##    { "packager": "espressif", "name": "espnow-monitor" },
+##    { "packager": "espressif", "name": "espota-monitor" },
+##  ]
+
+## platform.txt definition for custom discoveries and monitors
+## -----------------------------------------------------------
+##  pluggable_discovery.required.2=espressif:espnow-discovery
+##  pluggable_monitor.required.espnow=espressif:espnow-monitor
+##  pluggable_monitor.required.network=espressif:espota-monitor
+
+## Demo Pluggable Discovery
+pluggable_discovery.espnow.pattern="{runtime.platform.path}/tools/espnow-discovery.py"
+
+## Demo Pluggable Monitor
+pluggable_monitor.pattern.espnow="/Users/ficeto/Documents/Arduino/hardware/espressif/esp32/tools/espnow-monitor.py"
+
 
 ## ------------------
 ## Upload/Debug tools
