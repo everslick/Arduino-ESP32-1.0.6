@@ -29,7 +29,7 @@ class WiFiClientSecure : public WiFiClient
 {
 protected:
     sslclient_context *sslclient;
- 
+
     int _lastError = 0;
 	int _peek = -1;
     int _timeout = 0;
@@ -74,7 +74,8 @@ public:
     bool verify(const char* fingerprint, const char* domain_name);
     void setHandshakeTimeout(unsigned long handshake_timeout);
 
-    int setTimeout(uint32_t seconds){ return 0; }
+    int setTimeout(uint32_t seconds);
+    int setSocketOption(int option, char* value, size_t len);
 
     operator bool()
     {

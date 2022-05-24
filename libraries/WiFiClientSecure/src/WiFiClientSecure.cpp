@@ -215,7 +215,7 @@ int WiFiClientSecure::read(uint8_t *buf, size_t size)
         buf++;
         peeked = 1;
     }
-    
+
     int res = get_ssl_receive(sslclient, buf, size);
     if (res < 0) {
         stop();
@@ -340,4 +340,30 @@ int WiFiClientSecure::lastError(char *buf, const size_t size)
 void WiFiClientSecure::setHandshakeTimeout(unsigned long handshake_timeout)
 {
     sslclient->handshake_timeout = handshake_timeout * 1000;
+}
+
+int WiFiClientSecure::setTimeout(uint32_t seconds)
+{
+    _timeout = seconds * 1000;
+    if (sslclient->socket >= 0) {
+        struct timeval tv;
+        tv.tv_sec = seconds;
+        tv.tv_usec = 0;
+        if(setSocketOption(SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval)) < 0) {
+            return -1;
+        }
+        return setSocketOption(SO_SNDTIMEO, (char *)&tv, sizeof(struct timeval));
+    }
+    else {
+        return 0;
+    }
+}
+
+int WiFiClientSecure::setSocketOption(int option, char* value, size_t len)
+{
+    int res = setsockopt(sslclient->socket, SOL_SOCKET, option, value, len);
+    if(res < 0) {
+        log_e("%X : %d", option, errno);
+    }
+    return res;
 }
