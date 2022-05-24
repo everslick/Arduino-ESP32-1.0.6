@@ -1,3 +1,7 @@
+This is a fork of the original ESP32 Arduino core exatly at it's 1.0.0 release. After Version 1.0.6 came IDF 4 and this increased flash size requirements significantly. Nevertheless, some later bugfixes that went into upstream arduino-esp32 [have been backported](https://github.com/espressif/arduino-esp32/compare/master...everslick:master) to this fork.
+
+# Arduino core for ESP32 WiFi chip
+
 # Arduino core for the ESP32
 [![Build Status](https://travis-ci.org/espressif/arduino-esp32.svg?branch=master)](https://travis-ci.org/espressif/arduino-esp32) ![](https://github.com/espressif/arduino-esp32/workflows/ESP32%20Arduino%20CI/badge.svg)
 
