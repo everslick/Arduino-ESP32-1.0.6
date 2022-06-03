@@ -31,7 +31,7 @@ protected:
     sslclient_context *sslclient;
 
     int _lastError = 0;
-	int _peek = -1;
+  	int _peek = -1;
     int _timeout = 0;
     bool _use_insecure;
     const char *_CA_cert;
@@ -72,7 +72,6 @@ public:
     bool loadCertificate(Stream& stream, size_t size);
     bool loadPrivateKey(Stream& stream, size_t size);
     bool verify(const char* fingerprint, const char* domain_name);
-    void setHandshakeTimeout(unsigned long handshake_timeout);
 
     int setTimeout(uint32_t seconds);
     int setSocketOption(int option, char* value, size_t len);

@@ -31,17 +31,19 @@
 WiFiClientSecure::WiFiClientSecure()
 {
     _connected = false;
+    _timeout = 15000;
 
     sslclient = new sslclient_context;
     ssl_init(sslclient);
     sslclient->socket = -1;
-    sslclient->handshake_timeout = 120000;
+
     _use_insecure = false;
     _CA_cert = NULL;
     _cert = NULL;
     _private_key = NULL;
     _pskIdent = NULL;
     _psKey = NULL;
+
     next = NULL;
 }
 
@@ -49,12 +51,11 @@ WiFiClientSecure::WiFiClientSecure()
 WiFiClientSecure::WiFiClientSecure(int sock)
 {
     _connected = false;
-    _timeout = 0;
+    _timeout = 15000;
 
     sslclient = new sslclient_context;
     ssl_init(sslclient);
     sslclient->socket = sock;
-    sslclient->handshake_timeout = 120000;
 
     if (sock >= 0) {
         _connected = true;
@@ -65,6 +66,7 @@ WiFiClientSecure::WiFiClientSecure(int sock)
     _private_key = NULL;
     _pskIdent = NULL;
     _psKey = NULL;
+
     next = NULL;
 }
 
@@ -124,10 +126,13 @@ int WiFiClientSecure::connect(IPAddress ip, uint16_t port, const char *CA_cert, 
 
 int WiFiClientSecure::connect(const char *host, uint16_t port, const char *CA_cert, const char *cert, const char *private_key)
 {
-    if(_timeout > 0){
-        sslclient->handshake_timeout = _timeout;
+    int timeout = _timeout;
+
+    if (timeout <= 0) {
+      timeout = 25000;
     }
-    int ret = start_ssl_client(sslclient, host, port, _timeout, CA_cert, cert, private_key, NULL, NULL, _use_insecure);
+
+    int ret = start_ssl_client(sslclient, host, port, timeout, CA_cert, cert, private_key, NULL, NULL, _use_insecure);
     _lastError = ret;
     if (ret < 0) {
         log_e("start_ssl_client: %d", ret);
@@ -143,11 +148,14 @@ int WiFiClientSecure::connect(IPAddress ip, uint16_t port, const char *pskIdent,
 }
 
 int WiFiClientSecure::connect(const char *host, uint16_t port, const char *pskIdent, const char *psKey) {
-    log_v("start_ssl_client with PSK");
-    if(_timeout > 0){
-        sslclient->handshake_timeout = _timeout;
+    int timeout = _timeout;
+
+    if (timeout <= 0) {
+      timeout = 25000;
     }
-    int ret = start_ssl_client(sslclient, host, port, _timeout, NULL, NULL, NULL, pskIdent, psKey, _use_insecure);
+
+    log_v("start_ssl_client with PSK");
+    int ret = start_ssl_client(sslclient, host, port, timeout, NULL, NULL, NULL, pskIdent, psKey, _use_insecure);
     _lastError = ret;
     if (ret < 0) {
         log_e("start_ssl_client: %d", ret);
@@ -186,7 +194,15 @@ size_t WiFiClientSecure::write(const uint8_t *buf, size_t size)
     if (!_connected) {
         return 0;
     }
-    int res = send_ssl_data(sslclient, buf, size);
+
+    int timeout = _timeout;
+
+    if (timeout <= 0) {
+      timeout = 15000;
+    }
+
+    int res = send_ssl_data(sslclient, buf, size, timeout);
+
     if (res < 0) {
         stop();
         res = 0;
@@ -337,14 +353,10 @@ int WiFiClientSecure::lastError(char *buf, const size_t size)
     return _lastError;
 }
 
-void WiFiClientSecure::setHandshakeTimeout(unsigned long handshake_timeout)
-{
-    sslclient->handshake_timeout = handshake_timeout * 1000;
-}
-
 int WiFiClientSecure::setTimeout(uint32_t seconds)
 {
     _timeout = seconds * 1000;
+
     if (sslclient->socket >= 0) {
         struct timeval tv;
         tv.tv_sec = seconds;
