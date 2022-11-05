@@ -388,6 +388,8 @@ esp_err_t WiFiGenericClass::_eventCallback(void *arg, system_event_t *event, wif
         setStatusBits(STA_CONNECTED_BIT);
     } else if(event->event_id == SYSTEM_EVENT_STA_DISCONNECTED) {
         uint8_t reason = event->event_info.disconnected.reason;
+        // Reason 0 causes crash, use reason 1 (UNSPECIFIED) instead
+        if (!reason) reason = WIFI_REASON_UNSPECIFIED;
         log_w("Reason: %u - %s", reason, reason2str(reason));
         if(reason == WIFI_REASON_NO_AP_FOUND) {
             WiFiSTAClass::_setStatus(WL_NO_SSID_AVAIL);
